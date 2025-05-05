@@ -1,2 +1,1 @@
-**/alk.traj.dcd filter=lfs diff=lfs merge=lfs -text
 OpenACC/assessment/English/input/alk.traj.dcd filter=lfs diff=lfs merge=lfs -text
