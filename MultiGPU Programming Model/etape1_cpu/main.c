@@ -2,8 +2,9 @@
 // Solveur Jacobi sur grille 2D de taille N x N, T itérations.
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 
-#define N 1024
+#define N 4096
 #define T 1000
 
 void jacobi_cpu(double* A, double* B) {
@@ -17,14 +18,19 @@ void jacobi_cpu(double* A, double* B) {
         double* tmp = A; A = B; B = tmp;
     }
 }
-
 int main(int argc, char** argv) {
     double *A = malloc(N*N*sizeof(double));
     double *B = malloc(N*N*sizeof(double));
     for (int i = 0; i < N*N; i++) A[i] = B[i] = 0.0;
+
+    clock_t start = clock();
     jacobi_cpu(A, B);
-    printf("Terminé %s
-", "etape1_cpu");
+    clock_t end = clock();
+
+    double cpu_time = ((double)(end - start)) / CLOCKS_PER_SEC;
+    printf("Terminé %s\n", "etape1_cpu");
+    printf("CPU time: %.6f seconds\n", cpu_time);
+
     free(A); free(B);
     return 0;
 }

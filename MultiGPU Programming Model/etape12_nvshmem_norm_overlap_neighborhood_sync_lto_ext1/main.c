@@ -23,8 +23,7 @@ int main(int argc, char** argv) {
     double *B = malloc(N*N*sizeof(double));
     for (int i = 0; i < N*N; i++) A[i] = B[i] = 0.0;
     jacobi_cpu(A, B);
-    printf("Terminé %s
-", "etape12_nvshmem_norm_overlap_neighborhood_sync_lto_ext1");
+    printf("Terminé %s", "etape12_nvshmem_norm_overlap_neighborhood_sync_lto_ext1");
     free(A); free(B);
     return 0;
 }

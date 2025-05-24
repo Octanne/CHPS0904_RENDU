@@ -47,7 +47,7 @@ int main(int argc, char** argv) {{
     double *B = malloc(N*N*sizeof(double));
     for (int i = 0; i < N*N; i++) A[i] = B[i] = 0.0;
     jacobi_cpu(A, B);
-    printf("Terminé %s\n", "{nom}");
+    printf("Terminé %s", "{nom}");
     free(A); free(B);
     return 0;
 }}
@@ -93,7 +93,7 @@ details = {
 }
 
 for nom, desc in versions:
-    cells.append(nbf.new_markdown_cell(f"## {nom}\n**Description :** {desc}\n**Intérêt :** {details[nom]}"))
+    cells.append(nbf.new_markdown_cell(f"## {nom}\n**Description :** {desc}\n\n**Intérêt :** {details[nom]}"))
     cells.append(nbf.new_code_cell(f"%%bash cd {nom} ; make all"))
     cells.append(nbf.new_code_cell(f"%%bash cd {nom} ; nv-nsight-cu-cli --csv --report-file rapport_{nom}.csv ./main ;cat rapport_{nom}.csv"))
 

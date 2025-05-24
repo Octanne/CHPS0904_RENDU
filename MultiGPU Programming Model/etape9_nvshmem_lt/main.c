@@ -23,8 +23,7 @@ int main(int argc, char** argv) {
     double *B = malloc(N*N*sizeof(double));
     for (int i = 0; i < N*N; i++) A[i] = B[i] = 0.0;
     jacobi_cpu(A, B);
-    printf("Terminé %s
-", "etape9_nvshmem_lt");
+    printf("Terminé %s", "etape9_nvshmem_lt");
     free(A); free(B);
     return 0;
 }
