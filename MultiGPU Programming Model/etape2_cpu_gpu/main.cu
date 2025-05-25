@@ -5,7 +5,7 @@
 #include <time.h>
 #include <cuda_runtime.h>
 
-#define N 4096
+#define N 8192
 #define T 1000
 
 // Déclaration du kernel déplacé
