@@ -17,7 +17,7 @@ NVCCFLAGS   = -O3 -std=c++14 -lcudart \
 LDFLAGS     = -lmpi -lnccl -lstdc++
 
 SRCS        = main.cpp kernel.cu
-TARGET      = jacobi
+TARGET      = app
 
 all: $(TARGET)
 
@@ -27,9 +27,9 @@ $(TARGET): $(SRCS)
 
 run: all
 	# Adjust -np to number of ranks
-	mpirun -np 4 ./$(TARGET) -niter 1000 -nx 16384 -ny 16384 -nccheck 1
+	mpirun -np 4 ./$(TARGET) -niter 1000 -nx 4096 -ny 4096 -nccheck 1
 
 clean:
-	rm -f $(TARGET)
+	rm -f $(TARGET) *.o main.nsys-rep main.sqlite main.AnalysisSummary.html main.DiagnosticsSummary.html main.qdstrm
 
 .PHONY: all run clean

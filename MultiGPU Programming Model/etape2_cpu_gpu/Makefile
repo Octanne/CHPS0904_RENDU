@@ -21,6 +21,6 @@ run: all
 	./app
 
 clean:
-	rm -f $(TARGET)
+	rm -f $(TARGET) *.o main.nsys-rep main.sqlite main.AnalysisSummary.html main.DiagnosticsSummary.html
 
 .PHONY: all clean run

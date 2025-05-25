@@ -11,25 +11,25 @@ NVCC      = ${CUDA_PATH}/bin/nvcc
 MPICXX    = ${MPI_PATH}/bin/mpicxx
 
 SRCS      = main.cpp kernel.cu
-TARGET    = jacobi_mpi_nccl_overlap
+TARGET    = app
 
-CUDA_FLAGS = -O3 -std=c++14 -lcudart
-MPI_FLAGS  = -O3 -std=c++14 -lmpi
-NCCL_FLAGS = -O3 -std=c++14 -lnccl
+NVCC_FLAGS = -lineinfo -gencode arch=compute_90,code=sm_90 -gencode arch=compute_90,code=compute_90 -std=c++14
+MPI_FLAGS  = -DUSE_NVTX -O3 $(INCLUDES) -std=c++14
+LD_FLAGS   = $(LIB_PATHS) -lcudart -ldl -lnccl
 
 all: $(TARGET)
 
-kernel.o: kernel.cu
-	$(NVCC) $(CUDA_FLAGS) $(INCLUDES) -dc kernel.cu -o kernel.o
+$(TARGET): Makefile main.cpp kernel.o
+	$(MPICXX) $(MPI_FLAGS) main.cpp kernel.o $(LD_FLAGS) -o $@
 
-$(TARGET): kernel.o main.cpp
-	$(NVCC) $(CUDA_FLAGS) $(INCLUDES) main.cpp kernel.o $(LIB_PATHS) -lmpi -lnccl -o $@
+kernel.o: Makefile kernel.cu
+	$(NVCC) $(NVCC_FLAGS) $(INCLUDES) kernel.cu -c
 
 run: all
 	# adapter -np au nombre de GPUs
 	mpirun -np 4 --map-by ppr:1:node ./$(TARGET) 1000 16384 16384 1
 
 clean:
-	rm -f *.o $(TARGET)
+	rm -f $(TARGET) *.o main.nsys-rep main.sqlite main.AnalysisSummary.html main.DiagnosticsSummary.html main.qdstrm
 
 .PHONY: all run clean
