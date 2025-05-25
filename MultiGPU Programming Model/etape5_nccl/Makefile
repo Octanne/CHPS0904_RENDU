@@ -1,39 +1,35 @@
-# Makefile for CUDA application
+# Makefile pour Jacobi MPI+NCCL simple (sans overlap)
 
-# Chemins spécifiques
 CUDA_PATH = /apps/2025/manual_install/nvhpc/24.11/Linux_aarch64/24.11/cuda/12.6
+MPI_PATH  = /apps/2025/manual_install/nvhpc/24.11/Linux_aarch64/24.11/comm_libs/12.6/hpcx/hpcx-2.20/ompi
 NCCL_PATH = /apps/2025/manual_install/nvhpc/24.11/Linux_aarch64/24.11/comm_libs/nccl
 
-INCLUDES = -I${CUDA_PATH}/include \
-           -I${NCCL_PATH}/include
+INCLUDES  = -I${CUDA_PATH}/include -I${MPI_PATH}/include -I${NCCL_PATH}/include
+LIB_PATHS = -L${CUDA_PATH}/lib64 -L${MPI_PATH}/lib -L${NCCL_PATH}/lib
 
-LIB_PATHS = -L${CUDA_PATH}/lib64 \
-            -L${NCCL_PATH}/lib
+NVCC      = ${CUDA_PATH}/bin/nvcc
+MPICXX    = ${MPI_PATH}/bin/mpicxx
 
-# Compiler
-NVCC = nvcc
+SRCS      = main.cpp kernel.cu
+TARGET    = jacobi_mpi_nccl
 
-# Source files
-SRCS = main.cu kernel.cu
-
-# Output binary
-TARGET = app
-
-# Compiler flags
-NVCCFLAGS = -O2
-
-# Ajout du lien avec NCCL
-LDFLAGS = -lnccl
+CUDA_FLAGS = -O3 -std=c++14 -lcudart
+MPI_FLAGS  = -O3 -std=c++14 -lmpi
+NCCL_FLAGS = -O3 -std=c++14 -lnccl
 
 all: $(TARGET)
 
-$(TARGET): $(SRCS)
-	$(NVCC) $(NVCCFLAGS) $(LDFLAGS) $(INCLUDES) -Xlinker --no-as-needed $(LIB_PATHS) -o $@ $^
+kernel.o: kernel.cu
+	$(NVCC) $(CUDA_FLAGS) $(INCLUDES) -dc kernel.cu -o kernel.o
+
+$(TARGET): kernel.o main.cpp
+	$(NVCC) $(CUDA_FLAGS) $(INCLUDES) main.cpp kernel.o $(LIB_PATHS) -lmpi -lnccl -o $@
 
 run: all
-	./app
+	# adapter -np au nombre de GPUs
+	mpirun -np 4 --map-by ppr:1:node ./$(TARGET) 1000 16384 16384 1
 
 clean:
-	rm -f $(TARGET)
+	rm -f *.o $(TARGET)
 
-.PHONY: all clean run
+.PHONY: all run clean
