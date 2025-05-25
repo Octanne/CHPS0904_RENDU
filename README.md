@@ -1,5 +1,18 @@
 # CHPS0904_RENDU
 
+Avant de compiler ou d’exécuter les différentes étapes, il est recommandé de charger les modules nécessaires via Spack, de préférence avant de lancer VSCode ou Jupyter. Par exemple :
+
+```bash
+spack load nvhpc@24.11
+spack load cuda@12.6
+export NVSHMEM_HOME=/apps/2025/manual_install/nvhpc/24.11/Linux_aarch64/24.11/comm_libs/12.6/nvshmem
+export NCCL_HOME=/apps/2025/manual_install/nvhpc/24.11/Linux_aarch64/24.11/comm_libs/12.6/nccl
+export LD_LIBRARY_PATH=/apps/2025/manual_install/nvhpc/24.11/Linux_aarch64/24.11/comm_libs/12.6/nccl/lib:$LD_LIBRARY_PATH
+export LD_LIBRARY_PATH=/apps/2025/manual_install/nvhpc/24.11/Linux_aarch64/24.11/comm_libs/12.6/nvshmem/lib:$LD_LIBRARY_PATH
+unset OPAL_PREFIX
+unset PMIX_INSTALL_PREFIX
+```
+
 Ce rendu regroupe trois activités distinctes, chacune illustrant une approche différente de l'accélération sur GPU, adaptées à l'environnement ROMEO2025 :
 
 ## 1. GPU_Stream
