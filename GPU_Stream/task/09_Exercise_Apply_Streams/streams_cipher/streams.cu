@@ -35,14 +35,14 @@ bool check_result_cpu(uint64_t * data, uint64_t num_entries,
 }
 
 int main (int argc, char * argv[]) {
-
     const char * encrypted_file = "/dli/task/encrypted";
-
     Timer timer;
-
     const uint64_t num_entries = 1UL << 26;
     const uint64_t num_iters = 1UL << 10;
     const bool openmp = true;
+
+    // Paramétrable : nombre de streams (ajustez pour optimiser)
+    const uint64_t num_streams = 8;
 
     uint64_t * data_cpu, * data_gpu;
     cudaMallocHost(&data_cpu, sizeof(uint64_t)*num_entries);
@@ -56,17 +56,31 @@ int main (int argc, char * argv[]) {
         read_encrypted_from_file(encrypted_file, data_cpu, sizeof(uint64_t)*num_entries);
     }
 
+    // Création des streams
+    cudaStream_t streams[num_streams];
+    for (uint64_t i = 0; i < num_streams; ++i)
+        cudaStreamCreate(&streams[i]);
+
+    // Découpage en chunks
+    const uint64_t chunk_size = sdiv(num_entries, num_streams);
+
     timer.start();
-    cudaMemcpy(data_gpu, data_cpu, 
-               sizeof(uint64_t)*num_entries, cudaMemcpyHostToDevice);
-    check_last_error();
-
-    decrypt_gpu<<<80*32, 64>>>(data_gpu, num_entries, num_iters);
-    check_last_error();
-
-    cudaMemcpy(data_cpu, data_gpu, 
-               sizeof(uint64_t)*num_entries, cudaMemcpyDeviceToHost);
-    timer.stop("total time on GPU");
+    // Pour chaque stream, overlap copy/compute
+    for (uint64_t i = 0; i < num_streams; ++i) {
+        const uint64_t lower = chunk_size * i;
+        const uint64_t upper = std::min(lower + chunk_size, num_entries);
+        const uint64_t width = upper - lower;
+        // Hôte -> Device
+        cudaMemcpyAsync(data_gpu + lower, data_cpu + lower, sizeof(uint64_t) * width, cudaMemcpyHostToDevice, streams[i]);
+        // Kernel
+        decrypt_gpu<<<80*32, 64, 0, streams[i]>>>(data_gpu + lower, width, num_iters);
+        // Device -> Hôte
+        cudaMemcpyAsync(data_cpu + lower, data_gpu + lower, sizeof(uint64_t) * width, cudaMemcpyDeviceToHost, streams[i]);
+    }
+    // Synchronisation de tous les streams
+    for (uint64_t i = 0; i < num_streams; ++i)
+        cudaStreamSynchronize(streams[i]);
+    timer.stop("total time on GPU (overlap streams)");
     check_last_error();
 
     const bool success = check_result_cpu(data_cpu, num_entries, openmp);
@@ -76,5 +90,7 @@ int main (int argc, char * argv[]) {
 
     cudaFreeHost(data_cpu);
     cudaFree    (data_gpu);
+    for (uint64_t i = 0; i < num_streams; ++i)
+        cudaStreamDestroy(streams[i]);
     check_last_error();
 }

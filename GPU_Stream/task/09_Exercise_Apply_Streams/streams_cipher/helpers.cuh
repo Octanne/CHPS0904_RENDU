@@ -27,7 +27,7 @@ bool encrypted_file_exists(const char * encrypted_file) {
         fclose(file);
         return true;
     } else {
-        return false;
+      return false;
     }
 }
 
