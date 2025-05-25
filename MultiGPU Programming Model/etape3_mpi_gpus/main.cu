@@ -6,7 +6,7 @@
 #include <cuda_runtime.h>
 #include <mpi.h>
 
-#define N_GRILLE 8192
+#define N_GRILLE 4096
 #define T 1000
 
 __global__ void jacobi_kernel(double* A, double* B, int N_SIZE);

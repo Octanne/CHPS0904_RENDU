@@ -1,150 +1,127 @@
-// etape3_mpi_gpus : MPI + multi-GPU : résolution du problème de Jacobi avec plusieurs GPU sur un cluster.
+// etape4_mpi_overlap : Résolution du système d'équations par la méthode de Jacobi sur plusieurs GPU avec MPI et chevauchement des flux.
 // Solveur Jacobi sur grille 2D de taille N x N, T itérations.
 #include <stdio.h>
 #include <stdlib.h>
-#include <time.h>
-#include <cuda_runtime.h>
 #include <mpi.h>
+#include <cuda_runtime.h>
 
-#define N_GRILLE 8192
+#define N 4096
 #define T 1000
 
-__global__ void jacobi_kernel(double* A, double* B, int N_SIZE);
-
-// Version MPI + multi-GPU
-void jacobi_mpi_gpu(double* h_A, double* h_B, int N, int local_rows, int rank, int size, MPI_Comm comm) {
-    double *d_A, *d_B;
-    size_t local_size = (local_rows + 2) * N * sizeof(double); // +2 pour halos haut/bas
-
-    cudaSetDevice(rank % 8); // suppose max 8 GPUs par nœud
-
-    cudaMalloc(&d_A, local_size);
-    cudaMalloc(&d_B, local_size);
-
-    // Copier la sous-grille locale (hors halos)
-    cudaMemcpy(d_A + N, h_A + N, local_rows * N * sizeof(double), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_B + N, h_B + N, local_rows * N * sizeof(double), cudaMemcpyHostToDevice);
-
-    dim3 block(16, 16);
-    dim3 grid((N-2+block.x-1)/block.x, (local_rows+block.y-1)/block.y);
-
-    // Buffers pour halos sur le host
-    double* halo_send_top = (double*)malloc(N * sizeof(double));
-    double* halo_recv_top = (double*)malloc(N * sizeof(double));
-    double* halo_send_bot = (double*)malloc(N * sizeof(double));
-    double* halo_recv_bot = (double*)malloc(N * sizeof(double));
-
-    MPI_Request reqs[4];
-    MPI_Status stats[4];
-
-    for (int t = 0; t < T; t++) {
-        int req_count = 0;
-
-        // Préparer les halos à envoyer
-        if (rank > 0) {
-            cudaMemcpy(halo_send_top, d_A + N, N * sizeof(double), cudaMemcpyDeviceToHost);
-            MPI_Irecv(halo_recv_top, N, MPI_DOUBLE, rank-1, 1, comm, &reqs[req_count++]); // Recevoir du haut
-            MPI_Isend(halo_send_top, N, MPI_DOUBLE, rank-1, 0, comm, &reqs[req_count++]); // Envoyer au haut
-        }
-        if (rank < size-1) {
-            cudaMemcpy(halo_send_bot, d_A + local_rows*N, N * sizeof(double), cudaMemcpyDeviceToHost);
-            MPI_Irecv(halo_recv_bot, N, MPI_DOUBLE, rank+1, 0, comm, &reqs[req_count++]); // Recevoir du bas
-            MPI_Isend(halo_send_bot, N, MPI_DOUBLE, rank+1, 1, comm, &reqs[req_count++]); // Envoyer au bas
-        }
-
-        // Calcul local (hors bords)
-        // On saute la première et dernière ligne locale (qui dépendent des halos)
-        dim3 grid_inner((N-2+block.x-1)/block.x, (local_rows-2+block.y-1)/block.y);
-        jacobi_kernel<<<grid_inner, block>>>(d_A + N*N, d_B + N*N, N); // d_A + N*N pointe sur la 2e ligne locale
-        cudaDeviceSynchronize();
-
-        // Attendre la fin des échanges d’halos
-        if (req_count > 0)
-            MPI_Waitall(req_count, reqs, stats);
-
-        // Copier les halos reçus sur le device
-        if (rank > 0) {
-            cudaMemcpy(d_A, halo_recv_top, N * sizeof(double), cudaMemcpyHostToDevice);
-        }
-        if (rank < size-1) {
-            cudaMemcpy(d_A + (local_rows+1)*N, halo_recv_bot, N * sizeof(double), cudaMemcpyHostToDevice);
-        }
-
-        // Calcul des bords dépendant des halos
-        // Ligne du haut locale (première ligne calculable)
-        if (rank > 0) {
-            int i = 1;
-            jacobi_kernel<<<(N-2+block.x-1)/block.x, block.x>>>(
-                d_A + i*N, d_B + i*N, N
-            );
-        }
-        // Ligne du bas locale (dernière ligne calculable)
-        if (rank < size-1) {
-            int i = local_rows;
-            jacobi_kernel<<<(N-2+block.x-1)/block.x, block.x>>>(
-                d_A + i*N, d_B + i*N, N
-            );
-        }
-        cudaDeviceSynchronize();
-
-        double* tmp = d_A; d_A = d_B; d_B = tmp;
-    }
-
-    free(halo_send_top);
-    free(halo_recv_top);
-    free(halo_send_bot);
-    free(halo_recv_bot);
-
-    // Copier la sous-grille locale (hors halos) vers le host
-    cudaMemcpy(h_A + N, d_A + N, local_rows * N * sizeof(double), cudaMemcpyDeviceToHost);
-
-    cudaFree(d_A);
-    cudaFree(d_B);
-}
+__global__ void jacobi_kernel(double* A, double* B, int N_SIZE, int i_start, int i_end);
 
 int main(int argc, char** argv) {
     MPI_Init(&argc, &argv);
     int rank, size;
-    MPI_Comm comm = MPI_COMM_WORLD;
-    MPI_Comm_rank(comm, &rank);
-    MPI_Comm_size(comm, &size);
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
 
-    if (N_GRILLE < 3 || T < 1) {
-        if (rank == 0) {
-            fprintf(stderr, "N_GRILLE must be >= 3 and T must be >= 1\n");
+    cudaSetDevice(rank);
+
+    int rows_per_rank = N / size;
+    int i_start = rank * rows_per_rank + 1;
+    int i_end = (rank == size-1) ? N-1 : (rank+1)*rows_per_rank;
+    int local_rows = i_end - i_start;
+
+    // +2 for halos (top/bottom)
+    size_t local_size = (local_rows+2) * N * sizeof(double);
+    double *h_A = (double*)calloc((local_rows+2)*N, sizeof(double));
+    double *h_B = (double*)calloc((local_rows+2)*N, sizeof(double));
+    double *d_A, *d_B;
+    cudaMalloc(&d_A, local_size);
+    cudaMalloc(&d_B, local_size);
+
+    cudaStream_t stream_compute, stream_top, stream_bottom;
+    cudaStreamCreate(&stream_compute);
+    cudaStreamCreate(&stream_top);
+    cudaStreamCreate(&stream_bottom);
+
+    // Initialisation (optionnel : remplir h_A/h_B)
+    cudaMemcpyAsync(d_A, h_A, local_size, cudaMemcpyHostToDevice, stream_compute);
+    cudaMemcpyAsync(d_B, h_B, local_size, cudaMemcpyHostToDevice, stream_compute);
+
+    MPI_Request reqs[4];
+
+    dim3 block(16, 16);
+    dim3 grid((N-2+block.x-1)/block.x, (local_rows+block.y-1)/block.y);
+
+    // Synchronisation avant le chronométrage
+    MPI_Barrier(MPI_COMM_WORLD);
+    double t0 = MPI_Wtime();
+
+    if (rank == 0) {
+        printf("Début de l'itération Jacobi multi-GPU avec chevauchement des flux...\n");
+    }
+
+    for (int t = 0; t < T; t++) {
+        // 1. Échanges d’halos : device->host (asynchrone)
+        // Haut
+        if (rank > 0) {
+            cudaMemcpyAsync(h_A, d_A + 1*N, N*sizeof(double), cudaMemcpyDeviceToHost, stream_top);
         }
-        MPI_Finalize();
-        return EXIT_FAILURE;
+        // Bas
+        if (rank < size-1) {
+            cudaMemcpyAsync(h_A + (local_rows+1)*N, d_A + local_rows*N, N*sizeof(double), cudaMemcpyDeviceToHost, stream_bottom);
+        }
+
+        // 2. Lancer le calcul intérieur (hors bords) sur stream_compute
+        jacobi_kernel<<<grid, block, 0, stream_compute>>>(d_A, d_B, N, 1, local_rows+1);
+
+        // 3. Attendre la fin des copies device->host avant MPI
+        if (rank > 0) cudaStreamSynchronize(stream_top);
+        if (rank < size-1) cudaStreamSynchronize(stream_bottom);
+
+        // 4. MPI non bloquant pour halos
+        // Haut
+        if (rank > 0) {
+            MPI_Isend(h_A + 1*N, N, MPI_DOUBLE, rank-1, 0, MPI_COMM_WORLD, &reqs[0]);
+            MPI_Irecv(h_A, N, MPI_DOUBLE, rank-1, 1, MPI_COMM_WORLD, &reqs[1]);
+        }
+        // Bas
+        if (rank < size-1) {
+            MPI_Isend(h_A + local_rows*N, N, MPI_DOUBLE, rank+1, 1, MPI_COMM_WORLD, &reqs[2]);
+            MPI_Irecv(h_A + (local_rows+1)*N, N, MPI_DOUBLE, rank+1, 0, MPI_COMM_WORLD, &reqs[3]);
+        }
+
+        // 5. Attendre la fin des MPI
+        if (rank > 0) { MPI_Wait(&reqs[0], MPI_STATUS_IGNORE); MPI_Wait(&reqs[1], MPI_STATUS_IGNORE); }
+        if (rank < size-1) { MPI_Wait(&reqs[2], MPI_STATUS_IGNORE); MPI_Wait(&reqs[3], MPI_STATUS_IGNORE); }
+
+        // 6. Copier les halos reçus host->device (asynchrone)
+        if (rank > 0) {
+            cudaMemcpyAsync(d_A, h_A, N*sizeof(double), cudaMemcpyHostToDevice, stream_top);
+        }
+        if (rank < size-1) {
+            cudaMemcpyAsync(d_A + (local_rows+1)*N, h_A + (local_rows+1)*N, N*sizeof(double), cudaMemcpyHostToDevice, stream_bottom);
+        }
+
+        // 7. Synchroniser tous les streams avant itération suivante
+        cudaStreamSynchronize(stream_compute);
+        if (rank > 0) cudaStreamSynchronize(stream_top);
+        if (rank < size-1) cudaStreamSynchronize(stream_bottom);
+
+        // 8. Swap pointeurs
+        double* tmp = d_A; d_A = d_B; d_B = tmp;
+        double* tmp_h = h_A; h_A = h_B; h_B = tmp_h;
     }
 
-    // We set the message only on rank 0
+    printf("Rank %d terminé\n", rank);
+    MPI_Barrier(MPI_COMM_WORLD);
+    double t1 = MPI_Wtime();
+
+    // Optionnel : rassembler les résultats (MPI_Gather) ou écrire localement
+    cudaMemcpy(h_A, d_A, local_size, cudaMemcpyDeviceToHost);
+
     if (rank == 0) {
-        printf("Lancement de l'étape 3 : MPI + multi-GPU\n");
-        printf("Grille de taille %d x %d, T = %d itérations\n", N_GRILLE, N_GRILLE, T);
+        printf("Temps total (Jacobi multi-GPU overlap, %d rangs): %.6f secondes\n", size, t1-t0);
     }
 
-    int local_rows = (N_GRILLE-2) / size;
-    int rem = (N_GRILLE-2) % size;
-    if (rank < rem) local_rows++;
+    cudaFree(d_A); cudaFree(d_B);
+    free(h_A); free(h_B);
+    cudaStreamDestroy(stream_compute);
+    cudaStreamDestroy(stream_top);
+    cudaStreamDestroy(stream_bottom);
 
-    // Allouer la sous-grille locale (+2 lignes pour halos)
-    double *A = (double*)calloc((local_rows+2)*N_GRILLE, sizeof(double));
-    double *B = (double*)calloc((local_rows+2)*N_GRILLE, sizeof(double));
-
-    clock_t start = clock();
-    jacobi_mpi_gpu(A, B, N_GRILLE, local_rows, rank, size, comm);
-    clock_t end = clock();
-
-    double local_time = ((double)(end - start)) / CLOCKS_PER_SEC;
-    double max_time;
-    MPI_Reduce(&local_time, &max_time, 1, MPI_DOUBLE, MPI_MAX, 0, comm);
-
-    if (rank == 0) {
-        printf("Terminé %s rank %d/%d\n", "etape3_mpi_gpus (MPI + multi-GPU)", rank, size);
-        printf("Max GPU time: %.6f seconds rank %d/%d\n", max_time, rank, size);
-    }
-
-    free(A); free(B);
     MPI_Finalize();
     return 0;
 }

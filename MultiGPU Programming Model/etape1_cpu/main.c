@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include <time.h>
 
-#define N 8192
+#define N 4096
 #define T 1000
 
 void jacobi_cpu(double* A, double* B) {
