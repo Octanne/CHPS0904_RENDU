@@ -1,5 +1,5 @@
 CUDACXX=nvcc
-CUDACXXFLAGS=-arch=sm_70 -O3
+CUDACXXFLAGS=-arch=sm_90 -O3
 CXXFLAGS=-march=native -fopenmp
 NSYS=nsys profile
 NSYSFLAGS=--stats=true --force-overwrite=true
