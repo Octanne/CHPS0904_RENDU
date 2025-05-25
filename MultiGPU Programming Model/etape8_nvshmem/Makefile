@@ -2,23 +2,21 @@
 
 CUDA_PATH = /apps/2025/manual_install/nvhpc/24.11/Linux_aarch64/24.11/cuda/12.6
 MPI_PATH  = /apps/2025/manual_install/nvhpc/24.11/Linux_aarch64/24.11/comm_libs/12.6/hpcx/hpcx-2.20/ompi
-NCCL_PATH = /apps/2025/manual_install/nvhpc/24.11/Linux_aarch64/24.11/comm_libs/nccl
-NVSHMEM_PATH = /apps/2025/manual_install/nvhpc/24.11/Linux_aarch64/24.11/comm_libs/nvshmem
+NCCL_PATH = /apps/2025/manual_install/nvhpc/24.11/Linux_aarch64/24.11/comm_libs/12.6/nccl
+NVSHMEM_PATH = /apps/2025/manual_install/nvhpc/24.11/Linux_aarch64/24.11/comm_libs/12.6/nvshmem
 
-INCLUDES  = -I${CUDA_PATH}/include -I${MPI_PATH}/include -I${NCCL_PATH}/include \
-			-I${NVSHMEM_PATH}/include -I${NVSHMEM_PATH}/include/nvshmem
-LIB_PATHS = -L${CUDA_PATH}/lib64 -L${MPI_PATH}/lib -L${NCCL_PATH}/lib \
-			-L${NVSHMEM_PATH}/lib -L${NVSHMEM_PATH}/lib/nvshmem
+INCLUDES  = -I${NVSHMEM_PATH}/include
+LIB_PATHS = -L${CUDA_PATH}/lib64 -L${NVSHMEM_PATH}/lib
 
 NVCC      = ${CUDA_PATH}/bin/nvcc
 MPICXX    = ${MPI_PATH}/bin/mpicxx
 
-SRCS      = main.cpp kernel.cu
+SRCS      = main.cu
 TARGET    = main
 
 GENCODE_FLAGS = -gencode arch=compute_90,code=sm_90
 NVCC_FLAGS = -Xptxas --optimize-float-atomics -ccbin=mpic++ -dc -Xcompiler -fopenmp -lineinfo -DUSE_NVTX -ldl $(GENCODE_FLAGS) -std=c++14 $(INCLUDES)
-LD_FLAGS   = -ccbin=mpic++ $(LIB_PATHS) -lcuda -lcudart -ldl -lnvidia-ml -lnvshmem
+LD_FLAGS   = -ccbin=mpic++ $(LIB_PATHS) -lnvshmem -lcuda -lcudart -ldl -lnvidia-ml 
 
 all: $(TARGET)
 

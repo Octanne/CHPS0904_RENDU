@@ -1,7 +1,7 @@
 # Paths for your cluster modules
 CUDA_PATH   = /apps/2025/manual_install/nvhpc/24.11/Linux_aarch64/24.11/cuda/12.6
 MPI_PATH    = /apps/2025/manual_install/nvhpc/24.11/Linux_aarch64/24.11/comm_libs/12.6/hpcx/hpcx-2.20/ompi
-NCCL_PATH   = /apps/2025/manual_install/nvhpc/24.11/Linux_aarch64/24.11/comm_libs/nccl
+NCCL_PATH   = /apps/2025/manual_install/nvhpc/24.11/Linux_aarch64/24.11/comm_libs/12.6/nccl
 
 INCLUDES    = -I${CUDA_PATH}/include \
 			  -I${MPI_PATH}/include \
